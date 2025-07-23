@@ -1,0 +1,8 @@
+{
+  "name": "Q' Limpio - Laundry Management",
+  "description": "A comprehensive application for managing laundry services, from order tracking and client management to inventory and financial reporting. Designed to be intuitive for employees and powerful for administrators.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "prompt": ""
+}
