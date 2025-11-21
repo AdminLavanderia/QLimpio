@@ -1,3 +1,4 @@
+
 export enum OrderStatus {
     Assigned = "Turnos Asignados",
     Reception = "Recepción / Anotador",
@@ -107,6 +108,7 @@ export interface InventoryItem {
 export interface Employee {
     id: string;
     name: string;
+    username: string;
     role: Role;
     avatarUrl: string;
     password?: string;

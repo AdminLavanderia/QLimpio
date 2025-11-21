@@ -1,12 +1,11 @@
 
-
 import React, { useState } from 'react';
 import { useStore, actions } from '../services/store';
 import { Employee, Role, AttendanceRecord } from '../types';
 import { PlusIcon, EditIcon, ClockIcon, KeyIcon, EyeIcon, EyeOffIcon } from './icons';
 import { Modal, ModalForm, FormInput, FormSelect } from './common/Modal';
 
-const emptyEmployee: Employee = { id: '', name: '', role: Role.Employee, avatarUrl: '', password: '' };
+const emptyEmployee: Employee = { id: '', name: '', username: '', role: Role.Employee, avatarUrl: '', password: '' };
 
 const EmployeeStatus = ({ employeeId }: { employeeId: string }) => {
     const { attendance } = useStore();
@@ -69,6 +68,7 @@ export const EmployeeManagement: React.FC = () => {
                                 <img src={employee.avatarUrl} alt={employee.name} className="w-16 h-16 rounded-full mr-4" />
                                 <div>
                                     <p className="font-bold text-text-main">{employee.name}</p>
+                                    <p className="text-xs text-text-secondary mb-1">@{employee.username}</p>
                                     <p className="text-sm text-text-secondary">{employee.role}</p>
                                 </div>
                             </div>
@@ -114,11 +114,29 @@ const EmployeeModal = ({ employee, onClose, onSave }: { employee: Employee, onCl
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData(prev => {
+            const newData = { ...prev, [name]: value };
+            
+            // Auto-generate username suggestion for new employees when name changes, but only if user hasn't manually edited it
+            // or if it's a new user and they haven't typed in the username field yet (simple heuristic)
+            if (name === 'name' && !prev.id && (!prev.username || prev.username.length < 3)) {
+                 newData.username = value
+                    .toLowerCase()
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "")
+                    .replace(/\s+/g, '.')
+                    .replace(/[^a-z0-9.]/g, '');
+            }
+            return newData;
+        });
     };
 
     // Main save handler for the "Info" tab.
     const handleSaveChanges = () => {
+        if (!formData.username || formData.username.length < 3) {
+             alert('El nombre de usuario es obligatorio y debe tener al menos 3 caracteres.');
+             return;
+        }
         if (!formData.id && (!formData.password || formData.password.length < 4)) {
             alert('La contraseña es obligatoria y debe tener al menos 4 caracteres.');
             return;
@@ -179,6 +197,15 @@ const EmployeeModal = ({ employee, onClose, onSave }: { employee: Employee, onCl
                 <form onSubmit={(e) => { e.preventDefault(); handleSaveChanges(); }} className="flex flex-col flex-1 min-h-0">
                     <main className="p-6 overflow-y-auto flex-1 space-y-4">
                         <FormInput label="Nombre Completo" id="name" name="name" value={formData.name} onChange={handleChange} required />
+                        <FormInput 
+                            label="Usuario (para login)" 
+                            id="username" 
+                            name="username" 
+                            value={formData.username} 
+                            onChange={handleChange} 
+                            required 
+                            placeholder="ej: graciela.jorquera"
+                        />
                         {!formData.id && (
                              <FormInput
                                 label="Contraseña Inicial"

@@ -1,8 +1,8 @@
-
-
 import { useState, useEffect } from 'react';
 import { Order, Client, InventoryItem, Employee, Service, OrderStatus, ClientType, Role, AppFilters, TurneroFilter, InventoryFilter, AttendanceRecord, LogEntry, CalendarData, Equipment, EquipmentType, EquipmentStatus, Garment, Promotion, LoyaltyConfig, PointMovement, Payment, PaymentMethod, Expense, AccountPayable, ExpenseCategory, ExpenseByCategory, EmployeePerformance, SupplyUsage, TopClient, NotificationLog, KpiReportData, KpiCycleTime, KpiLoyalty, UsedSupply } from '../types';
 import { CHECKLISTS, KANBAN_COLUMNS, ChecklistItem } from '../constants';
+import { db } from './firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const today = new Date();
 const tomorrow = new Date(today);
@@ -12,6 +12,7 @@ yesterday.setDate(today.getDate() - 1);
 
 const formatDate = (date: Date) => date.toISOString().split('T')[0];
 
+// --- INITIAL / FALLBACK DATA ---
 const initialClients: Client[] = [
     { id: 'c1', name: 'Hotel Central', phone: '555-1234', type: ClientType.Corporate, preferences: 'Doblar camisas en lugar de colgar.', participa_fidelizacion: true, puntos_actuales: 1250, fecha_ultimo_pedido: formatDate(yesterday) },
     { id: 'c2', name: 'Ana S.', phone: '555-5678', type: ClientType.Regular, preferences: 'Usar siempre suavizante hipoalergénico.', participa_fidelizacion: true, puntos_actuales: 340, fecha_ultimo_pedido: formatDate(today) },
@@ -35,8 +36,8 @@ const initialServices: Service[] = [
 ];
 
 const initialEmployees: Employee[] = [
-    { id: 'e1', name: 'Juan Pérez', role: Role.Admin, avatarUrl: 'https://picsum.photos/id/237/100/100', password: 'password' },
-    { id: 'e2', name: 'María Gómez', role: Role.Employee, avatarUrl: 'https://picsum.photos/id/238/100/100', password: 'password' },
+    { id: 'e1', name: 'Juan Pérez', username: 'juan.perez', role: Role.Admin, avatarUrl: 'https://picsum.photos/id/237/100/100', password: 'password' },
+    { id: 'e2', name: 'María Gómez', username: 'maria.gomez', role: Role.Employee, avatarUrl: 'https://picsum.photos/id/238/100/100', password: 'password' },
 ];
 
 const initialEquipment: Equipment[] = [
@@ -102,6 +103,7 @@ const initialAccountsPayable: AccountPayable[] = [
 ];
 
 const initialFullState = {
+    isLoading: true, // Add loading state
     clients: initialClients,
     services: initialServices,
     orders: initialOrders,
@@ -121,30 +123,86 @@ const initialFullState = {
     expenseCategories: initialExpenseCategories,
 };
 
-const loadStateFromLocalStorage = () => {
-  try {
-    const serializedState = localStorage.getItem('qlimpio-app-state');
-    if (serializedState === null) {
-      return undefined; // No hay estado guardado, usaremos los datos iniciales.
+let state = { ...initialFullState };
+
+type State = typeof state;
+
+const listeners = new Set<() => void>();
+
+// Helper function to save specific data collections to Firestore
+const saveToFirestore = async (key: string, data: any) => {
+    try {
+        await setDoc(doc(db, "appData", key), { list: data });
+    } catch (e) {
+        // Fail silently on save error to not block UI, but log it
+        console.warn(`Error saving ${key} to Firestore (check permissions):`, e);
     }
-    return JSON.parse(serializedState);
-  } catch (err) {
-    console.error("Error al cargar el estado desde localStorage", err);
-    return undefined;
-  }
 };
 
-const persistedState = loadStateFromLocalStorage();
+// Load all data from Firestore on startup
+const initStore = async () => {
+    try {
+        const collectionsToLoad = [
+            'clients', 'services', 'orders', 'inventory', 'employees', 'equipment', 'attendance', 
+            'promotions', 'loyaltyConfig', 'pointMovements', 'payments', 'expenses', 
+            'accountsPayable', 'notificationLogs', 'expenseCategories'
+        ];
+
+        const newState: Partial<State> = { isLoading: false };
+        let hasConnectionError = false;
+
+        // We use Promise.allSettled to ensure that if one request fails (e.g. permission denied),
+        // the app still loads with whatever data it can or falls back to initial data.
+        const results = await Promise.allSettled(collectionsToLoad.map(async (key) => {
+            const docRef = doc(db, "appData", key);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (key === 'loyaltyConfig') {
+                    return { key, data: data as LoyaltyConfig };
+                } else {
+                    return { key, data: data.list };
+                }
+            }
+            return null;
+        }));
+
+        results.forEach((result) => {
+            if (result.status === 'fulfilled' && result.value) {
+                // @ts-ignore
+                newState[result.value.key] = result.value.data;
+            } else if (result.status === 'rejected') {
+                hasConnectionError = true;
+                console.warn("Error loading data chunk:", result.reason);
+            }
+        });
+
+        if (hasConnectionError) {
+            console.error("Could not load some data from Firestore. Using local fallback data where necessary.");
+        }
+
+        // If we didn't get orders (either DB is empty or connection failed), use initial data
+        if (!newState.orders) {
+            console.log("Firestore empty or unreachable, using initial demo data.");
+            // We don't overwrite state here, just let it fallback to the initialFullState values 
+            // which are already in 'state' variable if we didn't update them.
+            // However, we must ensure 'isLoading' is set to false.
+            store.setState({ isLoading: false });
+        } else {
+            store.setState(newState);
+        }
+        
+    } catch (error) {
+        console.error("Critical error initializing store:", error);
+        store.setState({ isLoading: false });
+    }
+};
 
 
-const authenticate = (employees: Employee[], username: string, password: string): Employee | null => {
+const authenticate = (employees: Employee[], usernameInput: string, password: string): Employee | null => {
     const employee = employees.find((e: Employee) => {
-        const expectedUsername = e.name
-            .toLowerCase()
-            .normalize("NFD") // Decompose accented characters (e.g., é -> e + ´)
-            .replace(/[\u0300-\u036f]/g, "") // Remove diacritical marks
-            .replace(/\s+/g, '.'); // Replace spaces with dots
-        return expectedUsername === username.toLowerCase();
+        // Compare explicit username directly
+        return e.username.toLowerCase() === usernameInput.toLowerCase();
     });
 
     if (employee && password === employee.password) {
@@ -152,12 +210,6 @@ const authenticate = (employees: Employee[], username: string, password: string)
     }
     return null;
 };
-
-let state = persistedState || initialFullState;
-
-type State = typeof state;
-
-const listeners = new Set<() => void>();
 
 const createLogEntry = (action: string): LogEntry => {
     return {
@@ -201,16 +253,26 @@ const createNotificationLog = (clientId: string, template: string, variables: Re
 };
 
 const store = {
+    init: initStore, // Expose init
     getState: () => state,
     setState: (newState: Partial<State>) => {
         state = { ...state, ...newState };
         listeners.forEach(l => l());
         
-        try {
-          localStorage.setItem('qlimpio-app-state', JSON.stringify(state));
-        } catch (err) {
-          console.error("Error al guardar el estado en localStorage", err);
-        }
+        // Persist to Firestore based on keys changed
+        Object.keys(newState).forEach(key => {
+            if (key !== 'isLoading' && key !== 'currentUser' && key !== 'filters') {
+                 // @ts-ignore
+                const dataToSave = key === 'loyaltyConfig' ? newState[key] : newState[key];
+                if (key === 'loyaltyConfig') {
+                     // Special handling for objects
+                     setDoc(doc(db, "appData", key), dataToSave as any).catch(e => console.warn("Save failed", e));
+                } else {
+                     // Standard handling for arrays
+                     saveToFirestore(key, dataToSave);
+                }
+            }
+        });
     },
     subscribe: (listener: () => void) => {
         listeners.add(listener);

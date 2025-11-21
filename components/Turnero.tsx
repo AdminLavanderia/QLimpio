@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo } from 'react';
 import { KANBAN_COLUMNS } from '../constants';
 import { actions, useStore } from '../services/store';
@@ -35,6 +34,10 @@ export const Turnero = ({ openOrderDetails }: { openOrderDetails: (order: Order)
             actions.moveOrder(orderId, status);
         }
     };
+    
+    const handleManualMove = (orderId: string, targetStatus: OrderStatus) => {
+        actions.moveOrder(orderId, targetStatus);
+    };
 
     return (
         <div className="h-full flex flex-col">
@@ -58,11 +61,15 @@ export const Turnero = ({ openOrderDetails }: { openOrderDetails: (order: Order)
             </div>
             <div className="flex-1 overflow-x-auto p-4">
                 <div className="flex space-x-4 h-full">
-                    {KANBAN_COLUMNS.map((status: OrderStatus) => {
+                    {KANBAN_COLUMNS.map((status: OrderStatus, index: number) => {
                         const ordersInColumn = filteredOrders.filter((o: Order) => o.status === status);
                         if (ordersInColumn.length === 0 && (activeFilter.status || activeFilter.date)) {
                             return null;
                         }
+
+                        const prevStatus = index > 0 ? KANBAN_COLUMNS[index - 1] : undefined;
+                        const nextStatus = index < KANBAN_COLUMNS.length - 1 ? KANBAN_COLUMNS[index + 1] : undefined;
+
                         return (
                             <div
                                 key={status}
@@ -85,6 +92,8 @@ export const Turnero = ({ openOrderDetails }: { openOrderDetails: (order: Order)
                                             order={order} 
                                             onDragStart={provideDragStartHandler(order.id)}
                                             onClick={() => openOrderDetails(order)}
+                                            onMovePrev={prevStatus ? () => handleManualMove(order.id, prevStatus) : undefined}
+                                            onMoveNext={nextStatus ? () => handleManualMove(order.id, nextStatus) : undefined}
                                         />
                                     ))}
                                 </div>

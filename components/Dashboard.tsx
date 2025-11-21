@@ -1,7 +1,4 @@
 
-
-
-
 import React from 'react';
 import { useStore, actions } from '../services/store';
 import { OrderStatus, AppView, Order, Role, Client, InventoryItem, AccountPayable } from '../types';
@@ -168,6 +165,14 @@ export const Dashboard: React.FC<{
                     <h3 className="font-display font-bold text-lg text-text-main mb-4">Accesos Directos</h3>
                     <div className="space-y-4">
                         <QuickAccessButton icon={<PlusIcon className="w-5 h-5"/>} label="Nuevo Pedido" onClick={onNewOrderClick} primary />
+                        <QuickAccessButton 
+                            icon={<DollarSignIcon className="w-5 h-5"/>} 
+                            label="Cobrar / Entregar" 
+                            onClick={() => {
+                                actions.setTurneroFilter({ status: OrderStatus.Ready, date: null });
+                                setActiveView('turnero');
+                            }} 
+                        />
                         <QuickAccessButton icon={<TurneroIcon className="w-5 h-5"/>} label="Ver Turnero" onClick={() => setActiveView('turnero')} />
                         <QuickAccessButton icon={<ClientsIcon className="w-5 h-5"/>} label="Ver Clientes" onClick={() => setActiveView('clients')} />
                         {isAdmin && <QuickAccessButton icon={<ReportIcon className="w-5 h-5"/>} label="Reporte de Ventas" onClick={() => setActiveView('reports')} />}
