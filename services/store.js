@@ -1,9 +1,9 @@
-
-import { useState, useEffect } from 'react';
 import { CHECKLISTS, KANBAN_COLUMNS } from '../constants.js';
 import { db } from './firebase.js';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { OrderStatus, ClientType, Role } from '../types.js';
+
+// --- ELIMINADO: Imports de React (Ya no los necesitamos) ---
 
 const today = new Date();
 const tomorrow = new Date(today);
@@ -104,7 +104,7 @@ const initialAccountsPayable = [
 ];
 
 const initialFullState = {
-    isLoading: true, // Add loading state
+    isLoading: true, 
     clients: initialClients,
     services: initialServices,
     orders: initialOrders,
@@ -133,7 +133,6 @@ const saveToFirestore = async (key, data) => {
     try {
         await setDoc(doc(db, "appData", key), { list: data });
     } catch (e) {
-        // Fail silently on save error to not block UI, but log it
         console.warn(`Error saving ${key} to Firestore (check permissions):`, e);
     }
 };
@@ -150,8 +149,6 @@ const initStore = async () => {
         const newState = { isLoading: false };
         let hasConnectionError = false;
 
-        // We use Promise.allSettled to ensure that if one request fails (e.g. permission denied),
-        // the app still loads with whatever data it can or falls back to initial data.
         const results = await Promise.allSettled(collectionsToLoad.map(async (key) => {
             const docRef = doc(db, "appData", key);
             const docSnap = await getDoc(docRef);
@@ -179,12 +176,8 @@ const initStore = async () => {
             console.error("Could not load some data from Firestore. Using local fallback data where necessary.");
         }
 
-        // If we didn't get orders (either DB is empty or connection failed), use initial data
         if (!newState.orders) {
             console.log("Firestore empty or unreachable, using initial demo data.");
-            // We don't overwrite state here, just let it fallback to the initialFullState values 
-            // which are already in 'state' variable if we didn't update them.
-            // However, we must ensure 'isLoading' is set to false.
             store.setState({ isLoading: false });
         } else {
             store.setState(newState);
@@ -199,7 +192,6 @@ const initStore = async () => {
 
 const authenticate = (employees, usernameInput, password) => {
     const employee = employees.find((e) => {
-        // Compare explicit username directly
         return e.username.toLowerCase() === usernameInput.toLowerCase();
     });
 
@@ -246,26 +238,25 @@ const createNotificationLog = (clientId, template, variables) => {
         template,
         content,
         timestamp: new Date().toISOString(),
-        status: 'sent' // Simulate success
+        status: 'sent' 
     };
 };
 
-const store = {
-    init: initStore, // Expose init
+// --- STORE PRINCIPAL (Vanilla JS) ---
+export const store = {
+    init: initStore,
     getState: () => state,
     setState: (newState) => {
         state = { ...state, ...newState };
+        // NOTIFICAR A LOS SUSCRIPTORES (Esto actualizará la pantalla)
         listeners.forEach(l => l());
         
-        // Persist to Firestore based on keys changed
         Object.keys(newState).forEach(key => {
             if (key !== 'isLoading' && key !== 'currentUser' && key !== 'filters') {
                 const dataToSave = newState[key];
                 if (key === 'loyaltyConfig') {
-                     // Special handling for objects
                      setDoc(doc(db, "appData", key), dataToSave).catch(e => console.warn("Save failed", e));
                 } else {
-                     // Standard handling for arrays
                      saveToFirestore(key, dataToSave);
                 }
             }
@@ -351,7 +342,6 @@ const store = {
         const originalOrder = state.orders.find((o) => o.id === orderId);
         if (!originalOrder) return;
 
-        // When moving via drag-and-drop, auto-complete all tasks from the previous stage
         let newCompletedTasks = [...(originalOrder.completedTasks || [])];
         const prevStageChecklist = CHECKLISTS[originalOrder.status];
         if (prevStageChecklist) {
@@ -371,46 +361,38 @@ const store = {
     
         const newHistory = [...updatedOrder.history];
     
-        // Status Change
         if (originalOrder.status !== updatedOrder.status) {
             newHistory.push(createLogEntry(`Estado cambiado de "${originalOrder.status}" a "${updatedOrder.status}".`));
         }
     
-        // Assignment Change
         if (originalOrder.assignedTo !== updatedOrder.assignedTo) {
             const oldE = state.employees.find((e) => e.id === originalOrder.assignedTo)?.name || 'Nadie';
             const newE = state.employees.find((e) => e.id === updatedOrder.assignedTo)?.name || 'Nadie';
             newHistory.push(createLogEntry(`Reasignado de ${oldE} a ${newE}.`));
         }
 
-        // Machine Change
         if (originalOrder.machineId !== updatedOrder.machineId) {
             const oldM = state.equipment.find((m) => m.id === originalOrder.machineId)?.name || 'Ninguna';
             const newM = state.equipment.find((m) => m.id === updatedOrder.machineId)?.name || 'Ninguna';
             newHistory.push(createLogEntry(`Máquina cambiada de ${oldM} a ${newM}.`));
         }
     
-        // Internal Notes Change
         if (originalOrder.internalNotes !== updatedOrder.internalNotes) {
             newHistory.push(createLogEntry('Notas internas actualizadas.'));
         }
         
-        // Supplies Change
         if (JSON.stringify(originalOrder.usedSupplies) !== JSON.stringify(updatedOrder.usedSupplies)) {
             newHistory.push(createLogEntry('Insumos del pedido actualizados.'));
         }
         
-        // Garments Change
         if (JSON.stringify(originalOrder.garments) !== JSON.stringify(updatedOrder.garments)) {
              newHistory.push(createLogEntry('Anotador de prendas actualizado.'));
         }
 
-        // Packaging Info Change
         if (JSON.stringify(originalOrder.info_empaque) !== JSON.stringify(updatedOrder.info_empaque)) {
             newHistory.push(createLogEntry('Información de empaque final actualizada.'));
         }
         
-        // Checklist tasks change
         const originalTasks = originalOrder.completedTasks || [];
         const updatedTasks = updatedOrder.completedTasks || [];
         if(originalTasks.length < updatedTasks.length) {
@@ -661,373 +643,4 @@ const store = {
         if (!client) return false;
 
         const orderTotalAfterDiscount = order.totalAmount - (order.discount || 0);
-        let finalAmountDue = orderTotalAfterDiscount - order.paidAmount;
-        let pointsRedeemedValue = 0;
-
-        // 1. Redeem points
-        if (pointsToRedeem > 0 && client.participa_fidelizacion) {
-            if (client.puntos_actuales < pointsToRedeem) {
-                alert("El cliente no tiene suficientes puntos.");
-                return false;
-            }
-            pointsRedeemedValue = pointsToRedeem * loyaltyConfig.pesoValuePerPoint;
-            if (pointsRedeemedValue > finalAmountDue) {
-                alert("No se pueden canjear más puntos que el total a pagar.");
-                return false;
-            }
-            
-            finalAmountDue -= pointsRedeemedValue;
-            client.puntos_actuales -= pointsToRedeem;
-            
-            pointMovements.push({
-                id: `pm${Date.now()}`,
-                clientId: client.id,
-                orderId: order.id,
-                type: 'canje',
-                points: -pointsToRedeem,
-                timestamp: new Date().toISOString()
-            });
-        }
-        
-        const amountToActuallyPay = finalAmountDue;
-        if (amountPaid < amountToActuallyPay && !isAdvance) {
-             if (amountPaid > 0) {
-                 alert("El monto pagado es menor al total adeudado. Marque como 'Adelanto' o complete el pago.");
-                 return false;
-             }
-        }
-
-        const newPayment = {
-            id: `pay${Date.now()}`,
-            orderId: order.id,
-            clientId: client.id,
-            amount: amountPaid,
-            method: method,
-            paymentDate: new Date().toISOString(),
-            isAdvance: isAdvance,
-        };
-
-        const updatedOrder = { ...order };
-        updatedOrder.paidAmount += amountPaid;
-
-        const newLogs = [...state.notificationLogs];
-        let pointsEarned = 0;
-
-        // 2. If it's not an advance, close the order and accumulate points
-        if (!isAdvance) {
-            updatedOrder.status = OrderStatus.Delivered;
-
-            if (client.participa_fidelizacion) {
-                pointsEarned = Math.floor(amountToActuallyPay * loyaltyConfig.pointsPerPeso);
-                if(pointsEarned > 0){
-                    client.puntos_actuales += pointsEarned;
-                    pointMovements.push({
-                        id: `pm${Date.now() + 1}`,
-                        clientId: client.id,
-                        orderId: order.id,
-                        type: 'acumulacion',
-                        points: pointsEarned,
-                        timestamp: new Date().toISOString()
-                    });
-                }
-            }
-            client.fecha_ultimo_pedido = new Date().toISOString().split('T')[0];
-
-            try {
-                const notification = createNotificationLog(client.id, 'payment_complete', {
-                    numericId: order.numericId,
-                    pointsEarned,
-                });
-                newLogs.push(notification);
-            } catch(e) {
-                console.error("Failed to create 'payment' notification", e);
-            }
-        }
-        
-        const updatedClients = clients.map((c) => c.id === client.id ? client : c);
-        
-        store.setState({
-            payments: [...state.payments, newPayment],
-            notificationLogs: newLogs,
-            clients: updatedClients,
-        });
-
-        // Call updateOrder to ensure history is logged
-        store.updateOrder(updatedOrder);
-
-        return true;
-    },
-
-    addExpense: (expense) => {
-        let { expenses, accountsPayable } = store.getState();
-        const newExpense = { ...expense, id: `ex${Date.now()}` };
-        
-        store.addExpenseCategory(newExpense.category);
-        
-        const newGeneratedPayables = [];
-        if (newExpense.installmentsInfo && newExpense.installmentsInfo.count > 0) {
-            const { count, firstDueDate } = newExpense.installmentsInfo;
-            const installmentAmount = newExpense.amount / count;
-            for (let i = 0; i < count; i++) {
-                const dueDate = new Date(firstDueDate + 'T00:00:00');
-                dueDate.setMonth(dueDate.getMonth() + i);
-                newGeneratedPayables.push({
-                    id: `ap${Date.now() + i}`,
-                    expenseId: newExpense.id,
-                    concept: `${newExpense.concept} (${i + 1}/${count})`,
-                    dueDate: dueDate.toISOString().split('T')[0],
-                    amount: installmentAmount,
-                    status: 'pendiente',
-                });
-            }
-        }
-        
-        store.setState({
-            expenses: [...expenses, newExpense],
-            accountsPayable: [...accountsPayable, ...newGeneratedPayables],
-        });
-    },
-
-    markAccountPayableAsPaid: (accountId) => {
-        let { accountsPayable } = store.getState();
-        const updatedAccountsPayable = accountsPayable.map((acc) => {
-            if (acc.id === accountId) {
-                return {
-                    ...acc,
-                    status: 'pagada',
-                    paymentDate: new Date().toISOString().split('T')[0],
-                };
-            }
-            return acc;
-        });
-        store.setState({ accountsPayable: updatedAccountsPayable });
-    },
-    
-    sendMarketingNotification: (clientIds, message) => {
-        const newLogs = [];
-        clientIds.forEach((clientId) => {
-            try {
-                const notification = createNotificationLog(clientId, 'manual_marketing', { message });
-                newLogs.push(notification);
-            } catch(e) {
-                console.error(`Failed to create marketing notification for client ${clientId}`, e);
-            }
-        });
-        store.setState({ notificationLogs: [...state.notificationLogs, ...newLogs] });
-    },
-
-
-    // Reports Actions
-    generateExpenseByCategory: (startDate, endDate) => {
-        const start = new Date(startDate + 'T00:00:00');
-        const end = new Date(endDate + 'T23:59:59');
-        const results = {};
-
-        state.expenses.forEach((e) => {
-            const expenseDate = new Date(e.date + 'T00:00:00');
-            if (!e.installmentsInfo && expenseDate >= start && expenseDate <= end) {
-                results[e.category] = (results[e.category] || 0) + e.amount;
-            }
-        });
-
-        state.accountsPayable.forEach((ap) => {
-            if (ap.status === 'pagada' && ap.paymentDate) {
-                const paymentDate = new Date(ap.paymentDate + 'T00:00:00');
-                if (paymentDate >= start && paymentDate <= end) {
-                    const originalExpense = state.expenses.find((e) => e.id === ap.expenseId);
-                    if (originalExpense) {
-                        results[originalExpense.category] = (results[originalExpense.category] || 0) + ap.amount;
-                    }
-                }
-            }
-        });
-
-        return Object.entries(results).map(([category, amount]) => ({
-            category,
-            amount,
-        })).sort((a, b) => b.amount - a.amount);
-    },
-
-    generateEmployeePerformance: (startDate, endDate) => {
-        const start = new Date(startDate + 'T00:00:00');
-        const end = new Date(endDate + 'T23:59:59');
-        const performance = {};
-
-        state.orders.forEach((order) => {
-            order.history.forEach((log) => {
-                const logDate = new Date(log.timestamp);
-                if (logDate >= start && logDate <= end && log.action.startsWith('Tarea completada:')) {
-                    const employee = state.employees.find((e) => e.id === log.userId);
-                    if (employee) {
-                        if (!performance[employee.id]) {
-                            performance[employee.id] = { employeeName: employee.name, tasksCompleted: 0 };
-                        }
-                        performance[employee.id].tasksCompleted++;
-                    }
-                }
-            });
-        });
-        
-        return Object.entries(performance).map(([employeeId, data]) => ({
-            employeeId,
-            ...data
-        })).sort((a,b) => b.tasksCompleted - a.tasksCompleted);
-    },
-    
-    generateSupplyUsage: (startDate, endDate) => {
-        const start = new Date(startDate + 'T00:00:00');
-        const end = new Date(endDate + 'T23:59:59');
-        const usage = {};
-
-        state.orders.forEach((order) => {
-            if (order.status === OrderStatus.Delivered) {
-                const receptionDate = new Date(order.receptionDate + 'T00:00:00');
-                if (receptionDate >= start && receptionDate <= end) {
-                    order.usedSupplies.forEach((used) => {
-                        const supplyInfo = state.inventory.find((i) => i.id === used.inventoryItemId);
-                        if (supplyInfo) {
-                            if (!usage[supplyInfo.id]) {
-                                usage[supplyInfo.id] = { supplyName: supplyInfo.name, quantityUsed: 0, unit: supplyInfo.unit };
-                            }
-                            usage[supplyInfo.id].quantityUsed += used.quantity;
-                        }
-                    });
-                }
-            }
-        });
-
-        return Object.entries(usage).map(([supplyId, data]) => ({
-            supplyId,
-            ...data
-        })).sort((a, b) => b.quantityUsed - a.quantityUsed);
-    },
-
-    generateTopClients: (startDate, endDate) => {
-        const start = new Date(startDate + 'T00:00:00');
-        const end = new Date(endDate + 'T23:59:59');
-        const clientData = {};
-        
-        state.orders.forEach((order) => {
-            const receptionDate = new Date(order.receptionDate + 'T00:00:00');
-            if (receptionDate >= start && receptionDate <= end) {
-                const clientInfo = state.clients.find((c) => c.id === order.clientId);
-                if (clientInfo) {
-                    if (!clientData[clientInfo.id]) {
-                        clientData[clientInfo.id] = { clientName: clientInfo.name, orderCount: 0, totalSpent: 0 };
-                    }
-                    clientData[clientInfo.id].orderCount++;
-                    clientData[clientInfo.id].totalSpent += order.totalAmount - (order.discount || 0);
-                }
-            }
-        });
-
-        return Object.entries(clientData).map(([clientId, data]) => ({
-            clientId,
-            ...data
-        }));
-    },
-
-    generateKpiReport: (startDate, endDate) => {
-        const start = new Date(startDate + 'T00:00:00');
-        const end = new Date(endDate + 'T23:59:59');
-
-        const deliveredOrdersInPeriod = [];
-
-        state.orders.forEach((order) => {
-            if (order.status === OrderStatus.Delivered) {
-                const finalPayment = state.payments
-                    .filter((p) => p.orderId === order.id && !p.isAdvance)
-                    .sort((a,b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime())[0];
-                
-                if (finalPayment) {
-                     const deliveryDate = new Date(finalPayment.paymentDate);
-                     if (deliveryDate >= start && deliveryDate <= end) {
-                         deliveredOrdersInPeriod.push({ order, deliveryTimestamp: finalPayment.paymentDate });
-                     }
-                }
-            }
-        });
-
-        // 1. On-Time Delivery Rate
-        let onTimeCount = 0;
-        if (deliveredOrdersInPeriod.length > 0) {
-            deliveredOrdersInPeriod.forEach(({ order, deliveryTimestamp }) => {
-                const promisedDate = new Date(order.deliveryDate + 'T23:59:59');
-                const actualDate = new Date(deliveryTimestamp);
-                if (actualDate <= promisedDate) {
-                    onTimeCount++;
-                }
-            });
-        }
-        const onTimeDeliveryRate = deliveredOrdersInPeriod.length > 0
-            ? (onTimeCount / deliveredOrdersInPeriod.length) * 100
-            : 0;
-
-        // 2. Cycle Time
-        const serviceCycleTimes = {};
-        deliveredOrdersInPeriod.forEach(({ order, deliveryTimestamp }) => {
-            const receptionDate = new Date(order.receptionDate + 'T00:00:00');
-            const deliveryDate = new Date(deliveryTimestamp);
-            const durationHours = (deliveryDate.getTime() - receptionDate.getTime()) / (1000 * 60 * 60);
-
-            order.services.forEach((s) => {
-                if (!serviceCycleTimes[s.serviceId]) {
-                    serviceCycleTimes[s.serviceId] = [];
-                }
-                serviceCycleTimes[s.serviceId].push(durationHours);
-            });
-        });
-
-        const cycleTimes = Object.entries(serviceCycleTimes).map(([serviceId, durations]) => {
-            const service = state.services.find((s) => s.id === serviceId);
-            const avgHours = durations.reduce((sum, d) => sum + d, 0) / durations.length;
-            return {
-                serviceName: service?.name || 'Servicio Desconocido',
-                avgHours: parseFloat(avgHours.toFixed(1)),
-            };
-        });
-
-        // 3. Loyalty
-        const ordersForLoyalty = state.orders.filter((order) => {
-            const receptionDate = new Date(order.receptionDate + 'T00:00:00');
-            return receptionDate >= start && receptionDate <= end;
-        });
-
-        const clientOrderCounts = {};
-        ordersForLoyalty.forEach((order) => {
-            clientOrderCounts[order.clientId] = (clientOrderCounts[order.clientId] || 0) + 1;
-        });
-        
-        const uniqueClients = Object.keys(clientOrderCounts).length;
-        let loyalty = { recurrentCustomerRate: 0, avgOrdersPerCustomer: 0 };
-
-        if (uniqueClients > 0) {
-            const recurrentClients = Object.values(clientOrderCounts).filter((count) => count > 1).length;
-            const totalOrders = ordersForLoyalty.length;
-            
-            loyalty = {
-                recurrentCustomerRate: (recurrentClients / uniqueClients) * 100,
-                avgOrdersPerCustomer: totalOrders / uniqueClients,
-            };
-        }
-
-        return {
-            onTimeDeliveryRate,
-            cycleTimes,
-            loyalty,
-        };
-    },
-};
-
-export function useStore() {
-    const [localState, setLocalState] = useState(store.getState());
-
-    useEffect(() => {
-        const unsubscribe = store.subscribe(() => setLocalState(store.getState()));
-        return () => unsubscribe();
-    }, []);
-
-    return localState;
-}
-
-export const actions = store;
+        let finalAmountDue = order
