@@ -1,6 +1,6 @@
 import { CHECKLISTS, KANBAN_COLUMNS } from '../constants.js';
 import { db } from './firebase.js';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { OrderStatus, ClientType, Role } from '../types.js';
 
 // --- ELIMINADO: Imports de React (Ya no los necesitamos) ---
