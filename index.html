@@ -9,18 +9,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
     
     <!-- Mobile Drag and Drop Polyfill -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/default.css">
     <script src="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/index.min.js"></script>
     <script>
-        // Initialize the polyfill
         try {
             MobileDragDrop.polyfill({
                 dragImageTranslateOverride: MobileDragDrop.scrollBehaviourDragImageTranslateOverride
             });
-            // Fix for iOS scrolling issues while dragging
             window.addEventListener( 'touchmove', function() {}, {passive: false});
         } catch (e) {
             console.warn("Mobile Drag Drop Polyfill could not be initialized", e);
@@ -32,11 +29,11 @@
         theme: {
           extend: {
             colors: {
-              'primary': '#4A90E2',      // Azul Moderno
-              'accent': '#F5A623',      // Naranja Intenso
-              'text-main': '#333333',   // Gris Oscuro
-              'text-secondary': '#888888', // Gris Medio
-              'background-light': '#F0F2F5', // Gris Claro
+              'primary': '#4A90E2',      
+              'accent': '#F5A623',      
+              'text-main': '#333333',   
+              'text-secondary': '#888888', 
+              'background-light': '#F0F2F5', 
               'status-green': '#2ECC71',
               'status-yellow': '#F1C40F',
               'status-red': '#E74C3C',
@@ -53,21 +50,19 @@
 <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@18.2.0",
-    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "recharts": "https://esm.sh/recharts@2.12.0",
     "firebase/app": "https://esm.sh/firebase@10.8.0/app",
     "firebase/firestore": "https://esm.sh/firebase@10.8.0/firestore",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/",
+    "recharts": "https://aistudiocdn.com/recharts@^3.4.1"
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body class="antialiased">
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module" src="/app.js"></script>
 </body>
 </html>
