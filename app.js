@@ -50,7 +50,9 @@ function renderLogin() {
                     <div><input id="password" type="password" required class="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-primary focus:border-primary sm:text-sm" placeholder="Contraseña"></div>
                 </div>
                 <div id="loginError" class="text-sm text-center text-status-red hidden">Usuario o contraseña incorrectos.</div>
-                <button type="submit" class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-blue-600 focus:outline-none">Ingresar</button>
+                <button type="submit" data-action="login" class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-blue-600 focus:outline-none">
+    Ingresar
+</button>
             </form>
              <p class="mt-4 text-xs text-center text-gray-400">
                 Prueba: juan.perez / password
@@ -774,3 +776,4 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial render (loading state)
     renderApp();
 });
+
