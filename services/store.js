@@ -37,7 +37,7 @@ const initialServices = [
 ];
 
 const initialEmployees = [
-    { id: 'e1', name: 'Juan Pérez', username: 'juan.perez', role: Role.Admin, avatarUrl: 'https://picsum.photos/id/237/100/100', password: 'password' },
+    { id: 'e1', name: 'Juan Pérez', username: 'juan.perez', role: Role.Admin, avatarUrl: 'https://picsum.photos/id/237/100/100', password: 'Linda2011' },
     { id: 'e2', name: 'María Gómez', username: 'maria.gomez', role: Role.Employee, avatarUrl: 'https://picsum.photos/id/238/100/100', password: 'password' },
 ];
 
