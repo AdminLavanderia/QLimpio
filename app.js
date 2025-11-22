@@ -74,7 +74,7 @@ function renderSidebar(currentUser) {
 }
 
 function renderDashboard(state) {
-    const { orders = [], inventory = [] } = state; // PROTECCION CONTRA UNDEFINED
+    const { orders = [], inventory = [] } = state;
     const todayStr = new Date().toISOString().split('T')[0];
     const ordersToday = orders.filter(o => o.receptionDate === todayStr).length;
     const incomeToday = orders.filter(o => o.receptionDate === todayStr).reduce((sum, o) => sum + o.paidAmount, 0);
@@ -204,8 +204,8 @@ function renderOrderModal(order, state) {
     }
 
     return `
-    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" data-action="close-modal">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col h-[80vh]" onclick="event.stopPropagation()">
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-overlay">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col h-[80vh]">
             <div class="flex justify-between p-4 border-b bg-gray-50 rounded-t-lg"><h2 class="font-bold text-xl">${isNew ? 'Nuevo Pedido' : `Pedido #${data.numericId}`}</h2><button data-action="close-modal" class="text-gray-500 hover:text-red-500">${ICONS.x}</button></div>
             <div class="flex border-b bg-white">
                 ${['General', 'Tareas', 'Prendas', 'Asignación'].map((lbl, idx) => `<button data-action="tab" data-tab="${['general', 'tasks', 'anotador', 'asignacion'][idx]}" class="flex-1 py-3 text-sm font-bold ${currentModalTab === ['general', 'tasks', 'anotador', 'asignacion'][idx] ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}">${lbl}</button>`).join('')}
@@ -218,8 +218,8 @@ function renderOrderModal(order, state) {
 
 function renderGenericModal(title, fieldsHTML, saveAction) {
     return `
-    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" data-action="close-modal">
-        <div class="bg-white rounded-lg shadow-lg w-full max-w-md" onclick="event.stopPropagation()">
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-overlay">
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-md">
             <div class="p-4 border-b flex justify-between font-bold text-lg"><span>${title}</span><button data-action="close-modal" class="text-gray-500">${ICONS.x}</button></div>
             <form id="genericForm" class="p-6 space-y-4">${fieldsHTML}</form>
             <div class="p-4 border-t flex justify-end gap-2"><button data-action="close-modal" class="px-4 py-2 border rounded text-gray-700">Cancelar</button><button data-action="${saveAction}" class="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">Guardar</button></div>
@@ -232,7 +232,7 @@ function renderApp() {
     try {
         const state = store.getState();
         const root = document.getElementById('root');
-        if (state.isLoading) { root.innerHTML = '<div class="flex h-screen items-center justify-center text-blue-600 font-bold text-xl">Cargando Sistema...</div>'; return; }
+        if (state.isLoading) { root.innerHTML = '<div class="flex h-screen items-center justify-center font-bold text-blue-600 font-xl">Cargando Sistema...</div>'; return; }
         if (!state.currentUser) { root.innerHTML = renderLogin(); return; }
 
         let viewHTML = '';
@@ -287,8 +287,14 @@ window.toggleService = (id, c) => {
 };
 
 document.addEventListener('click', async (e) => {
+    // 1. Cerrar modal al hacer clic en el fondo
+    if (e.target.classList.contains('modal-overlay')) {
+        activeModal = null;
+        renderApp();
+        return;
+    }
+
     const btn = e.target.closest('[data-action]');
-    if (!btn && e.target.hasAttribute('data-action') && e.target.dataset.action === 'close-modal') { activeModal = null; renderApp(); return; }
     if (!btn) return;
     e.preventDefault();
     
