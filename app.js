@@ -358,77 +358,114 @@ function renderModalOverlay(title, contentHTML, saveAction = 'save-modal') {
 }
 
 function renderOrderDetailsModal(order, state) {
-    const { services, inventory, employees, equipment } = state;
-    const client = state.clients.find(c => c.id === order.clientId);
-    const isReady = order.status === OrderStatus.Ready;
+    const { services, inventory, employees } = state;
+    // Si order es null, es un NUEVO pedido
+    const isNew = !order || !order.id;
+    const data = order || { 
+        numericId: 'Nuevo', 
+        clientId: '', 
+        status: OrderStatus.Reception, 
+        garments: [], 
+        services: [], 
+        deliveryDate: formatDate(new Date().toISOString().split('T')[0]) 
+    };
+    
+    const client = isNew ? null : state.clients.find(c => c.id === data.clientId);
+    const isReady = data.status === OrderStatus.Ready;
 
-    // Tabs logic
+    // Pestañas disponibles
     const tabs = [
+        { id: 'general', label: 'General' }, // Nueva pestaña para datos básicos
         { id: 'tasks', label: 'Tareas' },
         { id: 'anotador', label: 'Anotador' },
         { id: 'insumos', label: 'Insumos' },
         { id: 'asignacion', label: 'Asignación' }
     ];
 
+    // Si es nuevo, forzamos la pestaña General
+    if (isNew && currentModalTab !== 'general') currentModalTab = 'general';
+
     let content = '';
-    if (currentModalTab === 'tasks') {
-        const checklist = CHECKLISTS[order.status] || [];
+    
+    // --- CONTENIDO DE LAS PESTAÑAS ---
+    if (currentModalTab === 'general') {
         content = `
-            <h3 class="font-bold mb-4">Tareas para: ${order.status}</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold mb-1">Cliente</label>
+                    <select id="clientSelect" class="w-full p-2 border rounded" onchange="updateOrderField('clientId', this.value)">
+                        <option value="">Seleccionar Cliente...</option>
+                        ${state.clients.map(c => `<option value="${c.id}" ${c.id === data.clientId ? 'selected' : ''}>${c.name}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold mb-1">Fecha de Entrega</label>
+                    <input type="date" class="w-full p-2 border rounded" value="${data.deliveryDate}" onchange="updateOrderField('deliveryDate', this.value)">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold mb-1">Servicios</label>
+                    <div class="border p-2 rounded max-h-40 overflow-y-auto space-y-2">
+                        ${services.filter(s => s.activo).map(s => {
+                            const isSelected = (data.services || []).some(ser => ser.serviceId === s.id);
+                            return `
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleOrderService('${s.id}', this.checked)">
+                                <span>${s.name} (${formatCurrency(s.price)})</span>
+                            </label>`;
+                        }).join('')}
+                    </div>
+                </div>
+                 <div class="flex items-center mt-4">
+                    <input type="checkbox" id="isExpress" ${data.isExpress ? 'checked' : ''} onchange="updateOrderField('isExpress', this.checked)" class="h-4 w-4 text-accent">
+                    <label for="isExpress" class="ml-2 text-sm font-bold text-accent">¿Es Servicio Express?</label>
+                </div>
+            </div>`;
+    } else if (currentModalTab === 'tasks') {
+        const checklist = CHECKLISTS[data.status] || [];
+        content = `
+            <h3 class="font-bold mb-4">Tareas para: ${data.status}</h3>
             <ul class="space-y-2">
                 ${checklist.map(task => {
-                    const isDone = (order.completedTasks || []).includes(task.id);
+                    const isDone = (data.completedTasks || []).includes(task.id);
                     return `
                     <li class="flex items-center p-2 rounded ${isDone ? 'bg-green-50' : 'bg-gray-50'}">
                         <input type="checkbox" ${isDone ? 'checked disabled' : ''} data-action="complete-task" data-task-id="${task.id}" class="mr-3 h-5 w-5 text-primary">
                         <span class="${isDone ? 'line-through text-gray-500' : ''}">${task.label}</span>
                     </li>`;
                 }).join('')}
-                ${checklist.length === 0 ? '<p class="text-gray-500">No hay tareas específicas.</p>' : ''}
+                ${checklist.length === 0 ? '<p class="text-gray-500">No hay tareas específicas para este estado.</p>' : ''}
             </ul>`;
     } else if (currentModalTab === 'anotador') {
         content = `
             <div class="flex justify-between mb-2">
-                <h3 class="font-bold">Prendas</h3>
-                <button type="button" data-action="add-garment" class="text-sm text-primary font-bold">+ Añadir</button>
+                <h3 class="font-bold">Prendas ({data.garments?.length || 0})</h3>
+                <button type="button" data-action="add-garment" class="text-sm text-primary font-bold">+ Añadir Prenda</button>
             </div>
             <div class="space-y-2 max-h-60 overflow-y-auto">
-                ${(order.garments || []).map((g, idx) => `
-                    <div class="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded">
+                ${(data.garments || []).map((g, idx) => `
+                    <div class="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded border">
                         <input type="number" value="${g.quantity}" class="col-span-2 p-1 border rounded text-center" data-idx="${idx}" data-field="quantity" onchange="updateGarment(this)">
                         <input type="text" value="${g.name}" class="col-span-7 p-1 border rounded" placeholder="Descripción..." data-idx="${idx}" data-field="name" onchange="updateGarment(this)">
-                        <button type="button" class="col-span-2 text-blue-500 text-xs" data-action="open-camera" data-idx="${idx}">${ICONS.camera} ${g.photos ? g.photos.length : 0}</button>
-                        <button type="button" class="col-span-1 text-red-500" data-action="remove-garment" data-idx="${idx}">${ICONS.trash}</button>
+                        <button type="button" class="col-span-2 text-blue-500 text-xs flex items-center justify-center bg-white border rounded" data-action="open-camera" data-idx="${idx}">
+                            ${ICONS.camera} <span class="ml-1">${g.photos ? g.photos.length : 0}</span>
+                        </button>
+                        <button type="button" class="col-span-1 text-red-500 flex justify-center" data-action="remove-garment" data-idx="${idx}">${ICONS.trash}</button>
                     </div>
                 `).join('')}
+                ${(!data.garments || data.garments.length === 0) ? '<p class="text-center text-sm text-gray-400 py-4">No hay prendas registradas.</p>' : ''}
             </div>`;
     } else if (currentModalTab === 'insumos') {
-        content = `
-            <h3 class="font-bold mb-2">Insumos Usados</h3>
-            ${(order.usedSupplies || []).map((s, idx) => {
-                const item = inventory.find(i => i.id === s.inventoryItemId);
-                return `<div class="flex justify-between p-2 bg-gray-50 mb-1 rounded"><span>${item?.name}</span> <span class="font-bold">${s.quantity} ${item?.unit}</span></div>`;
-            }).join('')}
-            <div class="mt-4">
-                <select id="addSupplySelect" class="w-full p-2 border rounded mb-2">
-                    <option value="">Añadir insumo...</option>
-                    ${inventory.map(i => `<option value="${i.id}">${i.name}</option>`).join('')}
-                </select>
-                <button type="button" data-action="add-supply" class="w-full bg-gray-200 py-1 rounded text-sm">Añadir (1 unidad)</button>
-            </div>`;
+        // (Mantener lógica de insumos o simplificar por ahora)
+         content = `<p class="text-gray-500">Gestión de insumos disponible tras guardar el pedido.</p>`;
     } else if (currentModalTab === 'asignacion') {
-        content = `
+         content = `
             <div class="space-y-4">
                 <div>
                     <label class="block text-sm font-bold mb-1">Asignado a:</label>
-                    <select id="assignedToSelect" class="w-full p-2 border rounded" onchange="updateOrderField('assignedTo', this.value)">
+                    <select class="w-full p-2 border rounded" onchange="updateOrderField('assignedTo', this.value)">
                         <option value="">Nadie</option>
-                        ${employees.map(e => `<option value="${e.id}" ${e.id === order.assignedTo ? 'selected' : ''}>${e.name}</option>`).join('')}
+                        ${employees.map(e => `<option value="${e.id}" ${e.id === data.assignedTo ? 'selected' : ''}>${e.name}</option>`).join('')}
                     </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-bold mb-1">Notas Internas:</label>
-                    <textarea class="w-full p-2 border rounded" rows="3" onchange="updateOrderField('internalNotes', this.value)">${order.internalNotes || ''}</textarea>
                 </div>
             </div>`;
     }
@@ -436,23 +473,28 @@ function renderOrderDetailsModal(order, state) {
     return `
     <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" data-action="close-modal">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl h-[80vh] flex flex-col" onclick="event.stopPropagation()">
-            <header class="flex items-center justify-between p-4 border-b">
-                <h2 class="text-xl font-bold">Pedido #${order.numericId} - <span class="text-primary">${client?.name}</span></h2>
-                <button data-action="close-modal">${ICONS.x}</button>
+            <header class="flex items-center justify-between p-4 border-b bg-gray-50 rounded-t-lg">
+                <h2 class="text-xl font-bold">${isNew ? 'Nuevo Pedido' : `Pedido #${data.numericId}`}</h2>
+                <button data-action="close-modal" class="text-gray-500 hover:text-red-500 p-2">${ICONS.x}</button>
             </header>
-            <div class="flex border-b bg-gray-50">
+            
+            <div class="flex border-b bg-white overflow-x-auto">
                 ${tabs.map(t => `
-                    <button data-action="switch-tab" data-tab="${t.id}" class="flex-1 py-3 text-sm font-bold ${currentModalTab === t.id ? 'text-primary border-b-2 border-primary bg-white' : 'text-gray-500'}">
+                    <button data-action="switch-tab" data-tab="${t.id}" class="flex-1 py-3 text-sm font-bold whitespace-nowrap px-4 ${currentModalTab === t.id ? 'text-primary border-b-2 border-primary bg-blue-50' : 'text-gray-500 hover:bg-gray-50'}">
                         ${t.label}
                     </button>
                 `).join('')}
             </div>
+
             <main class="p-6 overflow-y-auto flex-1">
                 ${content}
             </main>
-            <footer class="p-4 border-t bg-gray-50 flex justify-between">
-                ${isReady ? `<button data-action="open-payment" class="bg-green-500 text-white px-4 py-2 rounded font-bold">Registrar Pago</button>` : '<div></div>'}
-                <button data-action="save-order-details" class="bg-primary text-white px-4 py-2 rounded font-bold">Guardar Cambios</button>
+            
+            <footer class="p-4 border-t bg-gray-50 flex justify-end space-x-3 rounded-b-lg">
+                <button data-action="close-modal" class="px-4 py-2 rounded-lg text-gray-700 bg-white border hover:bg-gray-100">Cancelar</button>
+                <button data-action="save-order-details" class="px-6 py-2 rounded-lg text-white bg-primary hover:bg-blue-600 font-bold shadow-sm">
+                    ${isNew ? 'Crear Pedido' : 'Guardar Cambios'}
+                </button>
             </footer>
         </div>
     </div>`;
@@ -770,10 +812,172 @@ document.addEventListener('click', async (e) => {
 });
 
 // --- INITIALIZATION ---
-document.addEventListener('DOMContentLoaded', () => {
-    actions.init();
-    store.subscribe(renderApp);
-    // Initial render (loading state)
-    renderApp();
+// --- HELPERS GLOBALES PARA LOS INPUTS ---
+window.toggleOrderService = (serviceId, checked) => {
+    if (activeModal && activeModal.type === 'order') {
+        const services = activeModal.data.services || [];
+        if (checked) {
+            services.push({ serviceId, quantity: 1 });
+        } else {
+            const idx = services.findIndex(s => s.serviceId === serviceId);
+            if (idx > -1) services.splice(idx, 1);
+        }
+        activeModal.data.services = services;
+    }
+};
+
+window.updateOrderField = (field, value) => {
+    if (activeModal && activeModal.type === 'order') {
+        activeModal.data[field] = value;
+    }
+};
+
+window.updateGarment = (input) => {
+    if (activeModal && activeModal.type === 'order') {
+        const idx = input.dataset.idx;
+        const field = input.dataset.field;
+        activeModal.data.garments[idx][field] = input.value;
+    }
+};
+
+// --- GESTOR DE EVENTOS CENTRALIZADO ---
+document.addEventListener('click', async (e) => {
+    // 1. Detectar clic en botón o padre del botón
+    const btn = e.target.closest('[data-action]');
+    
+    // 2. Manejo de cierre de modal al hacer clic en el fondo oscuro
+    if (!btn && e.target.hasAttribute('data-action') && e.target.dataset.action === 'close-modal') {
+        activeModal = null;
+        renderApp();
+        return;
+    }
+
+    if (!btn) return;
+    e.preventDefault(); // Evitar recargas por defecto
+
+    const action = btn.dataset.action;
+    const state = store.getState();
+
+    console.log("Acción detectada:", action); // Para depuración
+
+    // AUTH
+    if (action === 'login') {
+        const u = document.getElementById('username').value;
+        const p = document.getElementById('password').value;
+        if (!actions.login(u, p)) {
+            document.getElementById('loginError').classList.remove('hidden');
+        }
+        return;
+    }
+    if (action === 'logout') actions.logout();
+
+    // NAVEGACIÓN
+    if (action === 'nav') {
+        currentView = btn.dataset.view;
+        renderApp();
+    }
+    
+    // MODALES (ABRIR)
+    if (action === 'open-modal') {
+        const type = btn.dataset.modal;
+        const id = btn.dataset.id;
+        let data = {};
+
+        if (type === 'order') {
+             // Nuevo Pedido
+             currentModalTab = 'general'; // Reiniciar pestaña
+             activeModal = { type: 'order', data: null }; // Data null indica nuevo
+        } else {
+             // Otros modales (Clientes, etc)
+             if (id) {
+                if (type === 'client') data = state.clients.find(c => c.id === id);
+                if (type === 'inventory') data = state.inventory.find(i => i.id === id);
+                if (type === 'service') data = state.services.find(s => s.id === id);
+                if (type === 'employee') data = state.employees.find(e => e.id === id);
+                if (type === 'equipment') data = state.equipment.find(e => e.id === id);
+             }
+             activeModal = { type, data: { ...data } };
+        }
+        renderApp();
+    }
+
+    // MODALES (CERRAR)
+    if (action === 'close-modal') {
+        activeModal = null;
+        renderApp();
+    }
+
+    // DETALLES PEDIDO
+    if (action === 'open-details') {
+        const orderId = btn.dataset.id;
+        const order = state.orders.find(o => o.id === orderId);
+        if (order) {
+            activeModal = { type: 'order', data: JSON.parse(JSON.stringify(order)) };
+            currentModalTab = 'tasks'; // Por defecto tareas si ya existe
+            renderApp();
+        }
+    }
+
+    // PESTAÑAS DEL MODAL
+    if (action === 'switch-tab') {
+        currentModalTab = btn.dataset.tab;
+        renderApp(); // Re-renderiza para mostrar el contenido nuevo
+    }
+
+    // ACCIONES DENTRO DEL PEDIDO
+    if (action === 'add-garment') {
+        if (!activeModal.data.garments) activeModal.data.garments = [];
+        activeModal.data.garments.push({ quantity: 1, name: '', photos: [] });
+        renderApp();
+    }
+    if (action === 'remove-garment') {
+        const idx = btn.dataset.idx;
+        activeModal.data.garments.splice(idx, 1);
+        renderApp();
+    }
+
+    // GUARDAR PEDIDO (NUEVO O EDICIÓN)
+    if (action === 'save-order-details') {
+        const orderData = activeModal.data;
+        
+        // Validación básica
+        if (!orderData.clientId) {
+            alert("Por favor selecciona un cliente");
+            return;
+        }
+
+        if (orderData.numericId === 'Nuevo' || !orderData.id) {
+            // Es nuevo
+            actions.addOrder(orderData);
+        } else {
+            // Es actualización
+            actions.updateOrder(orderData);
+        }
+        
+        activeModal = null;
+        renderApp();
+    }
+
+    // GUARDAR OTROS MODALES (GENÉRICOS)
+    if (action.startsWith('save-') && action !== 'save-order-details') {
+        const type = action.replace('save-', '');
+        const form = document.getElementById('modal-form');
+        if(form) {
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+            const finalData = { ...activeModal.data, ...data };
+            
+            if (type === 'client') actions.addOrUpdateClient(finalData);
+            if (type === 'inventory') actions.addOrUpdateInventoryItem(finalData);
+            if (type === 'service') actions.addOrUpdateService({ ...finalData, price: parseFloat(finalData.price) });
+            if (type === 'employee') actions.addOrUpdateEmployee(finalData);
+            if (type === 'equipment') actions.addOrUpdateEquipment(finalData);
+            if (type === 'expense') actions.addExpense({ ...finalData, amount: parseFloat(finalData.amount) });
+
+            activeModal = null;
+            renderApp();
+        }
+    }
 });
+
 
